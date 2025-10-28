@@ -1,18 +1,18 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import api from '../../../utils/api';
 import TaskForm from '../../../components/Tasks/TaskForm';
 import Alert from '../../../components/Alert/Alert';
 import ConfirmationModal from '../../../components/Modal/ConfirmationModal';
-import { useAuth } from '../../../hooks/useAuth';
+import { useAuthStore } from '../../../stores/useAuthStore';
+import { useTaskStore } from '../../../stores/useTaskStore';
+import { useUIStore } from '../../../stores/useUIStore';
 import { useSocket } from '../../../hooks/useSocket';
 
 const TaskBoard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout } = useAuthStore();
+  const { tasks, setTasks, setLoading, addTask, updateTask, deleteTask } = useTaskStore();
+  const { alert, deleteModal, clearAlert, openDeleteModal, closeDeleteModal, showSuccessAlert, showErrorAlert } = useUIStore();
   const socket = useSocket(user?.id);
-  const [tasks, setTasks] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [alert, setAlert] = useState(null);
-  const [deleteModal, setDeleteModal] = useState({ isOpen: false, taskId: null, taskTitle: '' });
 
   useEffect(() => {
     fetchTasks();
@@ -21,24 +21,18 @@ const TaskBoard = () => {
   useEffect(() => {
     if (socket.socket) {
       socket.onTaskUpdate((data) => {
-        setTasks((prevTasks) =>
-          prevTasks.map((task) =>
-            task._id === data.task._id ? data.task : task
-          )
-        );
+        updateTask(data.task._id, data.task);
       });
 
       socket.onTaskCreate((data) => {
-        setTasks((prevTasks) => [data.task, ...prevTasks]);
+        addTask(data.task);
       });
 
       socket.onTaskDelete((data) => {
-        setTasks((prevTasks) =>
-          prevTasks.filter((task) => task._id !== data.taskId)
-        );
+        deleteTask(data.taskId);
       });
     }
-  }, [socket.socket]);
+  }, [socket.socket, updateTask, addTask, deleteTask]);
 
   const fetchTasks = async () => {
     try {
@@ -46,6 +40,7 @@ const TaskBoard = () => {
       setTasks(response.data);
     } catch (error) {
       console.error('Error fetching tasks:', error);
+      showErrorAlert('Failed to load tasks');
     } finally {
       setLoading(false);
     }
@@ -54,82 +49,53 @@ const TaskBoard = () => {
   const handleCreateTask = async (formData) => {
     try {
       const response = await api.post('/tasks', formData);
-      setTasks([response.data, ...tasks]);
-      socket.emitTaskCreate({ task: response.data });
-      setAlert({
-        message: 'Task created successfully!',
-        type: 'success'
-      });
+      addTask(response.data);
+      socket.emitTaskCreate({ task: response.data, userId: user.id });
+      showSuccessAlert('Task created successfully!');
     } catch (error) {
       console.error('Error creating task:', error);
-      setAlert({
-        message: 'Failed to create task',
-        type: 'error'
-      });
+      showErrorAlert('Failed to create task');
     }
   };
 
   const handleUpdateTask = async (taskId, updates) => {
     try {
       const response = await api.put(`/tasks/${taskId}`, updates);
-      setTasks((prevTasks) =>
-        prevTasks.map((task) =>
-          task._id === taskId ? response.data : task
-        )
-      );
-      socket.emitTaskUpdate({ task: response.data });
+      updateTask(taskId, response.data);
+      socket.emitTaskUpdate({ task: response.data, userId: user.id });
       
       if (updates.status) {
         const statusText = updates.status === 'todo' ? 'Todo' : 
                           updates.status === 'in-progress' ? 'In Progress' : 'Done';
-        setAlert({
-          message: `Task status changed to "${statusText}"`,
-          type: 'success'
-        });
+        showSuccessAlert(`Task status changed to "${statusText}"`);
       }
     } catch (error) {
       console.error('Error updating task:', error);
-      setAlert({
-        message: 'Failed to update task status',
-        type: 'error'
-      });
+      showErrorAlert('Failed to update task status');
     }
   };
 
   const handleDeleteTask = async (taskId) => {
     try {
       await api.delete(`/tasks/${taskId}`);
-      setTasks((prevTasks) =>
-        prevTasks.filter((task) => task._id !== taskId)
-      );
-      socket.emitTaskDelete({ taskId });
-      setAlert({
-        message: 'Task deleted successfully!',
-        type: 'success'
-      });
+      deleteTask(taskId);
+      socket.emitTaskDelete({ taskId, userId: user.id });
+      showSuccessAlert('Task deleted successfully!');
     } catch (error) {
       console.error('Error deleting task:', error);
-      setAlert({
-        message: 'Failed to delete task',
-        type: 'error'
-      });
+      showErrorAlert('Failed to delete task');
     }
-  };
-
-  const openDeleteModal = (taskId, taskTitle) => {
-    setDeleteModal({ isOpen: true, taskId, taskTitle });
-  };
-
-  const closeDeleteModal = () => {
-    setDeleteModal({ isOpen: false, taskId: null, taskTitle: '' });
   };
 
   const confirmDelete = () => {
     if (deleteModal.taskId) {
       handleDeleteTask(deleteModal.taskId);
     }
+    closeDeleteModal();
   };
 
+  const loading = useTaskStore((state) => state.loading);
+  
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
@@ -148,7 +114,7 @@ const TaskBoard = () => {
         <Alert
           message={alert.message}
           type={alert.type}
-          onClose={() => setAlert(null)}
+          onClose={clearAlert}
         />
       )}
       
@@ -157,7 +123,7 @@ const TaskBoard = () => {
         onClose={closeDeleteModal}
         onConfirm={confirmDelete}
         title="Delete Task"
-        message={`Are you sure you want to delete "${deleteModal.taskTitle}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete "${deleteModal.taskTitle || 'this task'}"? This action cannot be undone.`}
         confirmText="Delete"
         cancelText="Cancel"
         type="danger"

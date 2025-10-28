@@ -13,19 +13,19 @@ export const initializeSocket = (httpServer) => {
 
     socket.on('join-room', (userId) => {
       socket.join(userId);
-      console.log(`User ${userId} joined room`);
+      console.log(`User ${userId} joined room ${userId}`);
     });
 
     socket.on('task-updated', (data) => {
-      socket.broadcast.emit('task-updated', data);
+      socket.to(data.userId).emit('task-updated', data);
     });
 
     socket.on('task-created', (data) => {
-      socket.broadcast.emit('task-created', data);
+      socket.to(data.userId).emit('task-created', data);
     });
 
     socket.on('task-deleted', (data) => {
-      socket.broadcast.emit('task-deleted', data);
+      socket.to(data.userId).emit('task-deleted', data);
     });
 
     socket.on('disconnect', () => {

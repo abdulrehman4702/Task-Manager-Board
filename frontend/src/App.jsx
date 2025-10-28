@@ -1,39 +1,44 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useAuth } from './hooks/useAuth';
+import { useAuthStore } from './stores/useAuthStore';
+import { useAuthInit } from './hooks/useAuthInit';
 import Login from './features/Auth/Login/Login';
 import Signup from './features/Auth/Signup/Signup';
 import TaskBoard from './features/Tasks/TaskBoard/TaskBoard';
 
 const PrivateRoute = ({ children }) => {
-  const { user, loading } = useAuth();
+  const { isAuthenticated } = useAuthStore();
 
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p>Loading...</p>
-      </div>
-    );
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
   }
 
-  return user ? children : <Navigate to="/login" replace />;
+  return children;
 };
 
+function AppRoutes() {
+  return (
+    <Routes>
+      <Route path="/login" element={<Login />} />
+      <Route path="/signup" element={<Signup />} />
+      <Route
+        path="/tasks"
+        element={
+          <PrivateRoute>
+            <TaskBoard />
+          </PrivateRoute>
+        }
+      />
+      <Route path="/" element={<Navigate to="/tasks" replace />} />
+    </Routes>
+  );
+}
+
 function App() {
+  useAuthInit();
+  
   return (
     <Router>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/signup" element={<Signup />} />
-        <Route
-          path="/tasks"
-          element={
-            <PrivateRoute>
-              <TaskBoard />
-            </PrivateRoute>
-          }
-        />
-        <Route path="/" element={<Navigate to="/tasks" replace />} />
-      </Routes>
+      <AppRoutes />
     </Router>
   );
 }
