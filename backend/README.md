@@ -47,6 +47,6 @@ npm start
 ## WebSocket Events
 
 - `join-room` - Join user's room
-- `task-created` - Broadcast task creation
-- `task-updated` - Broadcast task update
-- `task-deleted` - Broadcast task deletion
+- `task-created` -  task creation
+- `task-updated` -  task update
+- `task-deleted` -  task deletion
